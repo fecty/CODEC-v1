@@ -3,6 +3,7 @@
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <Adafruit_NeoPixel.h>
 
 // Pin Definitions
 #define SENSOR_PIN A3 // MEMS Carbon Monoxide Sensor
@@ -12,6 +13,10 @@
 #define SW_PIN 8      // Rotary Encoder Button
 #define DT_PIN 7      // Rotary Encoder Channel A
 #define CLK_PIN 6     // Rotary Encoder channel B
+#define LED_PIN 3
+
+#define NUM_LEDS 24
+#define BRIGHTNESS 255
 
 // Definitations
 #define BAUD_RATE 115200
@@ -21,6 +26,8 @@
 #define OLED_ADDRESS 0x3C // I2C Address for OLED Display
 #define OLED_TEXT_SIZE 2
 #define OLED_TEXT_COLOR WHITE
+#define SENSOR_REFRESH_RATE 500
+#define BUZZER_THRESHOLD 20.0
 
 // Other Definitions
 #define OLED_START_X 0
@@ -33,14 +40,35 @@
 
 // Variable Declarations
 int sensorValue; // CO Sensor Value 0-1023
-double CO_PPM, CO_PPZ;
-int loopCounter;
+double CO_PPM, CO_PPZ, test_PPZ;
+Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB);
 // OLED Display Declaration
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+
+// Variables for managing timing
+unsigned long previousMillis = 0; // Stores the last time the buzzer toggled
+bool buzzerState = false;         // Tracks the current state of the buzzer
+int repeatCount = 0;              // Tracks how many times the pattern has repeated
+int totalRepeats = 0;             // Total repeats for the current tune
+int durationOn = 0;               // On duration for the buzzer
+int durationOff = 0;              // Off duration for the buzzer
+
+// Graph parameters
+const int graphTop = OLED_HEAD_HEIGHT + 1;
+const int graphBottom = OLED_END_Y-2;
+const int graphLeft = OLED_START_X+1;
+const int graphRight = OLED_END_X-1;
+int testCounter = 0;
 
 double calc_ppm(int x); // x is analog voltage taken from sensor
 double calc_ppz(int x); // custom unit from 0 to 100
 bool run_after(int time_ms, int counter);
+void drawBorders();
+uint32_t getColorFromValue(double value, Adafruit_NeoPixel &strip);
+void playWarningTune(int value);
+void playWarningTuneNonBlocking(int value);
+void plotValueOnGraph(int value);
+
 void setup()
 {
   Serial.begin(BAUD_RATE);
@@ -61,6 +89,9 @@ void setup()
   pinMode(DT_PIN, INPUT);
   pinMode(CLK_PIN, INPUT);
 
+  strip.begin();
+  strip.setBrightness(100);
+
   display.clearDisplay();
   display.setTextSize(OLED_TEXT_SIZE);
   display.setTextColor(OLED_TEXT_COLOR);
@@ -69,41 +100,58 @@ void setup()
   // display.invertDisplay(true);
   // display.setRotation(2);
 
+  Serial.begin(9600); // Start serial communication for debugging
+
   Serial.println("Carbon Monoxide Detector/Decorative Night Light\nZurain Nazir | E: nazirzurain@gmail.com | P: +91 7006775359\nDec. 2024");
 }
 
 void loop()
 {
   // LOOP START CODE
-  display.clearDisplay();
+  // display.clearDisplay();
+  display.fillRect(OLED_START_X, OLED_START_Y, 128, 16, BLACK);
+  strip.clear();
   display.setCursor(10, 1);
+  digitalWrite(BUZZER_PIN, LOW);
+  drawBorders();
+  if (testCounter > 100)
+  {
+    testCounter = 0;
+  }
 
-  // LOOP MAIN CODE
   sensorValue = analogRead(SENSOR_PIN);
   CO_PPM = calc_ppm(sensorValue);
   CO_PPZ = calc_ppz(sensorValue);
+  test_PPZ = sin(millis()/400)*50+50;
+  // LOOP MAIN CODE
+
+  if (CO_PPZ > BUZZER_THRESHOLD)
+  {
+    playWarningTuneNonBlocking(CO_PPZ);
+  }
+
+  // if (test_PPZ > BUZZER_THRESHOLD){
+  //   playWarningTuneNonBlocking(test_PPZ);
+  // }
+
+  plotValueOnGraph(sin(millis()/400)*40+50);
+  // plotValueOnGraph(CO_PPZ);
+
+  // strip.fill(getColorFromValue(CO_PPZ, strip));
+  // strip.fill(strip.Color(255, 0, 0));
+  strip.fill(getColorFromValue(test_PPZ, strip));
+  strip.show();
 
   display.print(CO_PPZ);
   display.print("PPZ");
 
-  Serial.print("CO Concentration in PPZ:");
-  Serial.println(CO_PPZ);
-  display.drawRect(OLED_START_X, OLED_START_Y, OLED_END_X, OLED_HEAD_HEIGHT, WHITE); // header rectangle
-  display.drawRect(OLED_START_X, OLED_HEAD_HEIGHT, OLED_END_X, OLED_END_Y - (OLED_HEAD_HEIGHT), WHITE);
-
-  if (run_after(10000, loopCounter))
-  {
-    // DELAY_MS * 100 = 10Sec
-    digitalWrite(BUZZER_PIN, HIGH);
-    delay(1000);
-    digitalWrite(BUZZER_PIN, LOW);
-    delay(1000);
-  }
+  // Serial.print("CO Concentration in PPZ:");
+  // Serial.println(CO_PPZ);
 
   // LOOP END CODE
   display.display();
   delay(DELAY_MS);
-  loopCounter++;
+  testCounter++;
 }
 
 double calc_ppm(int x) // High possibility of Inaccuracy
@@ -115,9 +163,133 @@ double calc_ppz(int x) // Custom Unit for CO concentration
   return (double)x * 100 / 1023;
 }
 
-bool run_after(int time_ms, int counter)
+void drawBorders()
 {
-  // time taken = DELAY_MS * PortionFactor -> PF = TimeTaken/DELAY_MS
+  display.drawRect(OLED_START_X, OLED_START_Y, OLED_END_X, OLED_HEAD_HEIGHT, WHITE); // header rectangle
+  display.drawRect(OLED_START_X, OLED_HEAD_HEIGHT, OLED_END_X, OLED_END_Y - (OLED_HEAD_HEIGHT), WHITE);
+}
 
-  return !(counter % (time_ms / DELAY_MS));
+uint32_t getColorFromValue(double value, Adafruit_NeoPixel &strip)
+{
+  // Clamp the value between 0.0 and 100.0
+  if (value < 0.0)
+    value = 0.0;
+  if (value > 100.0)
+    value = 100.0;
+
+  uint8_t r, g, b;
+
+  if (value <= 50.0)
+  {
+    // Green to Yellow (value 0 to 50)
+    r = (uint8_t)(value / 50.0 * 255); // Gradually increase red
+    g = 255;                           // Full green
+    b = 0;                             // No blue
+  }
+  else
+  {
+    // Yellow to Red (value 50 to 100)
+    r = 255;                                     // Full red
+    g = (uint8_t)((100.0 - value) / 50.0 * 255); // Gradually decrease green
+    b = 0;                                       // No blue
+  }
+
+  // Return the color in NeoPixel format
+  return strip.Color(r, g, b);
+}
+
+void playWarningTune(int value)
+{
+  // Clamp the value between 20 and 100
+  if (value < 20)
+    value = 20;
+  if (value > 100)
+    value = 100;
+
+  // Map the value to intensity parameters
+  int durationOn = map(value, 20, 100, 200, 50);  // On duration decreases as value increases
+  int durationOff = map(value, 20, 100, 200, 30); // Off duration decreases as value increases
+  int repeatCount = map(value, 20, 100, 3, 10);   // Repeat count increases as value increases
+
+  // Play the warning tune based on intensity
+  for (int i = 0; i < repeatCount; i++)
+  {
+    digitalWrite(BUZZER_PIN, HIGH); // Turn buzzer ON
+    delay(durationOn);
+    digitalWrite(BUZZER_PIN, LOW); // Turn buzzer OFF
+    delay(durationOff);
+  }
+}
+
+void playWarningTuneNonBlocking(int value)
+{
+  static int currentStage = 0;
+
+  // Clamp the value between 20 and 100
+  if (value < 20)
+    value = 20;
+  if (value > 100)
+    value = 100;
+
+  // Calculate parameters for the warning tune
+  durationOn = map(value, 20, 100, 200, 50);  // On duration decreases as value increases
+  durationOff = map(value, 20, 100, 200, 30); // Off duration decreases as value increases
+  totalRepeats = map(value, 20, 100, 3, 10);  // Repeat count increases as value increases
+
+  unsigned long currentMillis = millis();
+
+  // Handle buzzer timing
+  if (buzzerState && (currentMillis - previousMillis >= durationOn))
+  {
+    digitalWrite(BUZZER_PIN, LOW); // Turn buzzer OFF
+    buzzerState = false;
+    previousMillis = currentMillis;
+    repeatCount++; // Increment the pattern repeat count
+  }
+  else if (!buzzerState && (currentMillis - previousMillis >= durationOff))
+  {
+    if (repeatCount < totalRepeats)
+    {
+      digitalWrite(BUZZER_PIN, HIGH); // Turn buzzer ON
+      buzzerState = true;
+      previousMillis = currentMillis;
+    }
+    else
+    {
+      // Reset repeat count to stop the tune after the desired repeats
+      repeatCount = 0;
+    }
+  }
+}
+
+void plotValueOnGraph(int value)
+{
+  static int lastX = graphLeft;   // Keeps track of the last x-coordinate
+  static int lastY = graphBottom; // Keeps track of the last y-coordinate
+
+  // Constrain the value to 0-100
+  value = constrain(value, 0, 100);
+
+  // Map the value to the graph's vertical range
+  int y = map(value, 0, 100, graphBottom, graphTop);
+
+  // Increment the x-coordinate
+  int x = lastX + 1;
+  if (x >= graphRight)
+  {
+    // Clear the graph area if x exceeds the boundary and reset
+    display.fillRect(graphLeft + 1, graphTop + 1, graphRight - graphLeft - 2, graphBottom - graphTop - 2, SSD1306_BLACK);
+    // display.clearDisplay();
+    x = graphLeft + 1;
+  }
+
+  // Draw a line connecting the last point to the new point
+  display.drawLine(lastX, lastY, x, y, SSD1306_WHITE);
+
+  // Update the last point
+  lastX = x;
+  lastY = y;
+
+  // Display the updated graph
+  display.display();
 }
