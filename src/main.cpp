@@ -44,6 +44,7 @@ double CO_PPM, CO_PPZ, test_PPZ;
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB);
 // OLED Display Declaration
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+bool testMode = false;
 
 // Variables for managing timing
 unsigned long previousMillis = 0; // Stores the last time the buzzer toggled
@@ -55,9 +56,9 @@ int durationOff = 0;              // Off duration for the buzzer
 
 // Graph parameters
 const int graphTop = OLED_HEAD_HEIGHT + 1;
-const int graphBottom = OLED_END_Y-2;
-const int graphLeft = OLED_START_X+1;
-const int graphRight = OLED_END_X-1;
+const int graphBottom = OLED_END_Y - 2;
+const int graphLeft = OLED_START_X + 1;
+const int graphRight = OLED_END_X - 1;
 int testCounter = 0;
 
 double calc_ppm(int x); // x is analog voltage taken from sensor
@@ -85,7 +86,7 @@ void setup()
   delay(2000); // Wait for Display to initialize
 
   pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(SW_PIN, INPUT);
+  pinMode(SW_PIN, INPUT_PULLUP);
   pinMode(DT_PIN, INPUT);
   pinMode(CLK_PIN, INPUT);
 
@@ -100,6 +101,14 @@ void setup()
   // display.invertDisplay(true);
   // display.setRotation(2);
 
+  // display.print("Zurain Nazir");
+  // display.print("CO Detector");
+  // display.display();
+  // delay(3000);
+  // display.clearDisplay();
+
+
+
   Serial.begin(9600); // Start serial communication for debugging
 
   Serial.println("Carbon Monoxide Detector/Decorative Night Light\nZurain Nazir | E: nazirzurain@gmail.com | P: +91 7006775359\nDec. 2024");
@@ -107,6 +116,13 @@ void setup()
 
 void loop()
 {
+  if (digitalRead(SW_PIN) == 0)
+  {
+    digitalWrite(BUZZER_PIN, HIGH);
+    testMode = !testMode;
+    delay(1000);
+    digitalWrite(BUZZER_PIN, LOW);
+  }
   // LOOP START CODE
   // display.clearDisplay();
   display.fillRect(OLED_START_X, OLED_START_Y, 128, 16, BLACK);
@@ -122,31 +138,43 @@ void loop()
   sensorValue = analogRead(SENSOR_PIN);
   CO_PPM = calc_ppm(sensorValue);
   CO_PPZ = calc_ppz(sensorValue);
-  test_PPZ = sin(millis()/400)*50+50;
-  // LOOP MAIN CODE
+  test_PPZ = sin(millis() / 400) * 50 + 50;
 
-  if (CO_PPZ > BUZZER_THRESHOLD)
+  // LOOP MAIN CODE
+  if (testMode)
   {
-    playWarningTuneNonBlocking(CO_PPZ);
+    if (test_PPZ > BUZZER_THRESHOLD)
+    {
+      playWarningTuneNonBlocking(test_PPZ);
+    }
+    // plotValueOnGraph(sin(millis() / 500) * 40 + 50);
+    plotValueOnGraph(test_PPZ / 1.2 + 10);
+    strip.fill(getColorFromValue(test_PPZ, strip));
+    
+
+    display.print(test_PPZ);
+    display.print("PPT");
+    Serial.print("CO Concentration in PPT:");
+    Serial.println(test_PPZ);
+  }
+  else
+  {
+    if (CO_PPZ > BUZZER_THRESHOLD)
+    {
+      playWarningTuneNonBlocking(CO_PPZ);
+    }
+    plotValueOnGraph(CO_PPZ);
+    strip.fill(getColorFromValue(CO_PPZ, strip));
+    display.print(CO_PPZ);
+    display.print("PPZ");
+
+    Serial.print("CO Concentration in PPZ:");
+    Serial.println(CO_PPZ);
+    
   }
 
-  // if (test_PPZ > BUZZER_THRESHOLD){
-  //   playWarningTuneNonBlocking(test_PPZ);
-  // }
-
-  plotValueOnGraph(sin(millis()/400)*40+50);
-  // plotValueOnGraph(CO_PPZ);
-
-  // strip.fill(getColorFromValue(CO_PPZ, strip));
   // strip.fill(strip.Color(255, 0, 0));
-  strip.fill(getColorFromValue(test_PPZ, strip));
   strip.show();
-
-  display.print(CO_PPZ);
-  display.print("PPZ");
-
-  // Serial.print("CO Concentration in PPZ:");
-  // Serial.println(CO_PPZ);
 
   // LOOP END CODE
   display.display();
@@ -281,6 +309,9 @@ void plotValueOnGraph(int value)
     display.fillRect(graphLeft + 1, graphTop + 1, graphRight - graphLeft - 2, graphBottom - graphTop - 2, SSD1306_BLACK);
     // display.clearDisplay();
     x = graphLeft + 1;
+    y = graphBottom + 1;
+    lastX = x;
+    lastY = y;
   }
 
   // Draw a line connecting the last point to the new point
