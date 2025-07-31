@@ -13,21 +13,22 @@
 #define SW_PIN 8      // Rotary Encoder Button
 #define DT_PIN 7      // Rotary Encoder Channel A
 #define CLK_PIN 6     // Rotary Encoder channel B
-#define LED_PIN 3
+#define LED_PIN 3     // LED Data pin
 
-#define NUM_LEDS 24
-#define BRIGHTNESS 255
+// NeoPixel LED Definitions
+#define NUM_LEDS 24    // Number of LEDs in the strip
+#define BRIGHTNESS 255 // LED brightness
 
 // Definitations
-#define BAUD_RATE 115200
-#define DELAY_MS 200     // Delay after each itteration of loop in miliseconds.
+#define BAUD_RATE 115200  // Serial communication baud rate
+#define DELAY_MS 200      // Delay after each iteration of loop in milliseconds.
 #define SCREEN_WIDTH 128  // OLED Display Width
 #define SCREEN_HEIGHT 64  // OLED Display Height
 #define OLED_ADDRESS 0x3C // I2C Address for OLED Display
-#define OLED_TEXT_SIZE 2
+#define OLED_TEXT_SIZE 2  // OLED Text Size
 #define OLED_TEXT_COLOR WHITE
-#define SENSOR_REFRESH_RATE 500
-#define BUZZER_THRESHOLD 10.0
+#define SENSOR_REFRESH_RATE 500 // Sensor refresh rate
+#define BUZZER_THRESHOLD 10.0   // Threshold for buzzer to activate
 
 // Other Definitions
 #define OLED_START_X 0
@@ -42,6 +43,7 @@
 int sensorValue; // CO Sensor Value 0-1023
 double CO_PPM, CO_PPZ, test_PPZ;
 Adafruit_NeoPixel strip(NUM_LEDS, LED_PIN, NEO_GRB);
+
 // OLED Display Declaration
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 bool testMode = false;
@@ -61,19 +63,22 @@ const int graphLeft = OLED_START_X + 1;
 const int graphRight = OLED_END_X - 1;
 int testCounter = 0;
 
-double calc_ppm(int x); // x is analog voltage taken from sensor
-double calc_ppz(int x); // custom unit from 0 to 100
-bool run_after(int time_ms, int counter);
-void drawBorders();
-uint32_t getColorFromValue(double value, Adafruit_NeoPixel &strip);
-void playWarningTune(int value);
-void playWarningTuneNonBlocking(int value);
-void plotValueOnGraph(int value);
+// Function Declarations
+double calc_ppm(int x);                                             // x is analog voltage taken from sensor
+double calc_ppz(int x);                                             // custom unit from 0 to 100
+bool run_after(int time_ms, int counter);                           // Checks if a certain time has passed
+void drawBorders();                                                 // Draws borders on the OLED display
+uint32_t getColorFromValue(double value, Adafruit_NeoPixel &strip); // Gets color based on CO value
+void playWarningTune(int value);                                    // Plays warning tune
+void playWarningTuneNonBlocking(int value);                         // Plays warning tune without blocking
+void plotValueOnGraph(int value);                                   // Plots value on the graph
 
+// Setup Function
 void setup()
 {
   Serial.begin(BAUD_RATE);
 
+  // Initialize OLED display
   if (!display.begin(SSD1306_SWITCHCAPVCC, OLED_ADDRESS))
   { // Address 0x3D for 128x64
     Serial.println(F("SSD1306 allocation failed"));
@@ -85,37 +90,30 @@ void setup()
   }
   delay(2000); // Wait for Display to initialize
 
+  // Pin Mode Setup
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(SW_PIN, INPUT_PULLUP);
   pinMode(DT_PIN, INPUT);
   pinMode(CLK_PIN, INPUT);
 
+  // Initialize NeoPixel strip
   strip.begin();
   strip.setBrightness(100);
 
+  // Initialize Display
   display.clearDisplay();
   display.setTextSize(OLED_TEXT_SIZE);
   display.setTextColor(OLED_TEXT_COLOR);
   display.setCursor(0, 0);
   display.setTextWrap(false);
-  // display.invertDisplay(true);
-  // display.setRotation(2);
-
-  // display.print("Zurain Nazir");
-  // display.print("CO Detector");
-  // display.display();
-  // delay(3000);
-  // display.clearDisplay();
-
-
-
-  Serial.begin(9600); // Start serial communication for debugging
 
   Serial.println("Carbon Monoxide Detector/Decorative Night Light\nZurain Nazir | E: nazirzurain@gmail.com | P: +91 7006775359\nDec. 2024");
 }
 
+// Main Loop
 void loop()
 {
+  // Check if the button is pressed to toggle test mode
   if (digitalRead(SW_PIN) == 0)
   {
     digitalWrite(BUZZER_PIN, HIGH);
@@ -123,18 +121,21 @@ void loop()
     delay(200);
     digitalWrite(BUZZER_PIN, LOW);
   }
+
   // LOOP START CODE
-  // display.clearDisplay();
   display.fillRect(OLED_START_X, OLED_START_Y, 128, 16, BLACK);
   strip.clear();
-  display.setCursor(1, 1);
+  display.setCursor(20, 1);
   digitalWrite(BUZZER_PIN, LOW);
   drawBorders();
+
+  // Reset test counter
   if (testCounter > 100)
   {
     testCounter = 0;
   }
 
+  // Read sensor value and calculate CO concentration
   sensorValue = analogRead(SENSOR_PIN);
   CO_PPM = calc_ppm(sensorValue);
   CO_PPZ = calc_ppz(sensorValue);
@@ -143,14 +144,13 @@ void loop()
   // LOOP MAIN CODE
   if (testMode)
   {
+    // Test mode operations
     if (test_PPZ > BUZZER_THRESHOLD)
     {
       playWarningTuneNonBlocking(test_PPZ);
     }
-    // plotValueOnGraph(sin(millis() / 500) * 40 + 50);
     plotValueOnGraph(test_PPZ / 1.2 + 10);
     strip.fill(getColorFromValue(test_PPZ, strip));
-    
 
     display.print(test_PPZ);
     display.print("PPT");
@@ -159,22 +159,20 @@ void loop()
   }
   else
   {
+    // Normal mode operations
     if (CO_PPZ > BUZZER_THRESHOLD)
     {
       playWarningTuneNonBlocking(CO_PPZ);
     }
     plotValueOnGraph(CO_PPZ);
     strip.fill(getColorFromValue(CO_PPZ, strip));
-    display.print("CONC: ");
     display.print(CO_PPZ);
     display.print("PPZ");
 
     Serial.print("CO Concentration in PPZ:");
     Serial.println(CO_PPZ);
-    
   }
 
-  // strip.fill(strip.Color(255, 0, 0));
   strip.show();
 
   // LOOP END CODE
@@ -183,21 +181,26 @@ void loop()
   testCounter++;
 }
 
+// Function to calculate CO concentration in PPM
 double calc_ppm(int x) // High possibility of Inaccuracy
 {
   return 5.03 * x - 145.91;
 }
+
+// Function to calculate CO concentration in PPZ (custom unit)
 double calc_ppz(int x) // Custom Unit for CO concentration
 {
   return (double)x * 100 / 1023;
 }
 
+// Function to draw borders on the OLED display
 void drawBorders()
 {
-  display.drawRect(OLED_START_X, OLED_START_Y, OLED_END_X, OLED_HEAD_HEIGHT, WHITE); // header rectangle
-  display.drawRect(OLED_START_X, OLED_HEAD_HEIGHT, OLED_END_X, OLED_END_Y - (OLED_HEAD_HEIGHT), WHITE);
+  display.drawRect(OLED_START_X, OLED_START_Y, OLED_END_X, OLED_HEAD_HEIGHT, WHITE);                    // header rectangle
+  display.drawRect(OLED_START_X, OLED_HEAD_HEIGHT, OLED_END_X, OLED_END_Y - (OLED_HEAD_HEIGHT), WHITE); // graph rectangle
 }
 
+// Function to get color from CO value for NeoPixel
 uint32_t getColorFromValue(double value, Adafruit_NeoPixel &strip)
 {
   // Clamp the value between 0.0 and 100.0
@@ -227,6 +230,7 @@ uint32_t getColorFromValue(double value, Adafruit_NeoPixel &strip)
   return strip.Color(r, g, b);
 }
 
+// Function to play warning tune
 void playWarningTune(int value)
 {
   // Clamp the value between 20 and 100
@@ -250,6 +254,7 @@ void playWarningTune(int value)
   }
 }
 
+// Non-blocking function to play warning tune
 void playWarningTuneNonBlocking(int value)
 {
   static int currentStage = 0;
@@ -291,6 +296,7 @@ void playWarningTuneNonBlocking(int value)
   }
 }
 
+// Function to plot value on the graph
 void plotValueOnGraph(int value)
 {
   static int lastX = graphLeft;   // Keeps track of the last x-coordinate
