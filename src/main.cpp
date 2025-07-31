@@ -20,14 +20,14 @@
 
 // Definitations
 #define BAUD_RATE 115200
-#define DELAY_MS 100      // Delay after each itteration of loop in miliseconds.
+#define DELAY_MS 200     // Delay after each itteration of loop in miliseconds.
 #define SCREEN_WIDTH 128  // OLED Display Width
 #define SCREEN_HEIGHT 64  // OLED Display Height
 #define OLED_ADDRESS 0x3C // I2C Address for OLED Display
 #define OLED_TEXT_SIZE 2
 #define OLED_TEXT_COLOR WHITE
 #define SENSOR_REFRESH_RATE 500
-#define BUZZER_THRESHOLD 20.0
+#define BUZZER_THRESHOLD 10.0
 
 // Other Definitions
 #define OLED_START_X 0
@@ -120,14 +120,14 @@ void loop()
   {
     digitalWrite(BUZZER_PIN, HIGH);
     testMode = !testMode;
-    delay(1000);
+    delay(200);
     digitalWrite(BUZZER_PIN, LOW);
   }
   // LOOP START CODE
   // display.clearDisplay();
   display.fillRect(OLED_START_X, OLED_START_Y, 128, 16, BLACK);
   strip.clear();
-  display.setCursor(10, 1);
+  display.setCursor(1, 1);
   digitalWrite(BUZZER_PIN, LOW);
   drawBorders();
   if (testCounter > 100)
@@ -165,6 +165,7 @@ void loop()
     }
     plotValueOnGraph(CO_PPZ);
     strip.fill(getColorFromValue(CO_PPZ, strip));
+    display.print("CONC: ");
     display.print(CO_PPZ);
     display.print("PPZ");
 
