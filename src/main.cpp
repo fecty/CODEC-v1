@@ -27,7 +27,7 @@
 #define OLED_ADDRESS 0x3C // I2C Address for OLED Display
 #define OLED_TEXT_SIZE 2  // OLED Text Size
 #define OLED_TEXT_COLOR WHITE
-#define SENSOR_REFRESH_RATE 500 // Sensor refresh rate
+#define SENSOR_REFRESH_RATE 1000 // Sensor refresh rate
 #define BUZZER_THRESHOLD 10.0   // Threshold for buzzer to activate
 
 // Other Definitions
@@ -211,19 +211,24 @@ uint32_t getColorFromValue(double value, Adafruit_NeoPixel &strip)
 
   uint8_t r, g, b;
 
-  if (value <= 50.0)
+  if (value <= 25.0)
   {
     // Green to Yellow (value 0 to 50)
     r = (uint8_t)(value / 50.0 * 255); // Gradually increase red
     g = 255;                           // Full green
     b = 0;                             // No blue
   }
-  else
+  else if (25.0 < value <= 50.0)
   {
     // Yellow to Red (value 50 to 100)
     r = 255;                                     // Full red
     g = (uint8_t)((100.0 - value) / 50.0 * 255); // Gradually decrease green
     b = 0;                                       // No blue
+  }
+  else{
+    r = 255;
+    g = 0;
+    b = 0;
   }
 
   // Return the color in NeoPixel format
